@@ -1,0 +1,12 @@
+# Ignore face and voice data files
+*.jpg
+*.wav
+# Bytecode and cache
+__pycache__/
+*.pyc
+# Environment
+venv*/
+.env
+# OS files
+.DS_Store
+Thumbs.db
