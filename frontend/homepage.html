@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SolChain Digital ID - Homepage</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #f4f6fa; margin: 0; padding: 0; }
+        .container { max-width: 400px; margin: 40px auto; background: #fff; border-radius: 10px; box-shadow: 0 2px 8px #0001; padding: 32px; }
+        h2 { text-align: center; color: #2d3a4b; }
+        .form-group { margin-bottom: 18px; }
+        label { display: block; margin-bottom: 6px; color: #2d3a4b; }
+        input[type="file"] { width: 100%; }
+        button { width: 100%; padding: 10px; background: #2d8cf0; color: #fff; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; margin-top: 10px; }
+        button:hover { background: #1a6fb3; }
+        .result { margin-top: 20px; padding: 10px; border-radius: 5px; background: #eaf6ff; color: #2d3a4b; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>SolChain Digital ID</h2>
+        <form id="registerForm" enctype="multipart/form-data">
+            <div class="form-group">
+                <label for="face">Upload Face Image (.jpg):</label>
+                <input type="file" id="face" name="face" accept="image/*" required style="display:none;">
+                <button type="button" id="openCameraBtn">Open Camera</button>
+            </div>
+            <div class="form-group">
+                <label for="voice">Upload Voice Sample (.wav):</label>
+                <input type="file" id="voice" name="voice" accept="audio/*" required style="display:none;">
+                <button type="button" id="startRecordingBtn">Start Recording</button>
+            </div>
+            <div class="form-group">
+                <label for="wallet">Wallet Address (optional):</label>
+                <input type="text" id="wallet" name="wallet" placeholder="Phantom Wallet Address">
+            </div>
+            <button type="submit">Register</button>
+        </form>
+        <form id="verifyForm" enctype="multipart/form-data" style="margin-top:30px;">
+            <div class="form-group">
+                <label for="face_verify">Upload Face Image (.jpg):</label>
+                <input type="file" id="face_verify" name="face" accept="image/*" required style="display:none;">
+                <button type="button" id="openCameraBtnVerify">Open Camera</button>
+            </div>
+            <div class="form-group">
+                <label for="voice_verify">Upload Voice Sample (.wav):</label>
+                <input type="file" id="voice_verify" name="voice" accept="audio/*" required style="display:none;">
+                <button type="button" id="startRecordingBtnVerify">Start Recording</button>
+            </div>
+            <div class="form-group">
+                <label for="wallet_verify">Wallet Address (optional):</label>
+                <input type="text" id="wallet_verify" name="wallet" placeholder="Phantom Wallet Address">
+            </div>
+            <button type="submit">Verify</button>
+        </form>
+        <div id="result" class="result" style="display:none;"></div>
+    </div>
+    <script>
+        const backendUrl = 'http://127.0.0.1:5000';
+        const resultDiv = document.getElementById('result');
+
+        // Open camera and capture face image
+        document.getElementById('openCameraBtn').onclick = async function(e) {
+            e.preventDefault();
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                const video = document.createElement('video');
+                video.autoplay = true;
+                video.style.width = '100%';
+                video.style.maxHeight = '300px';
+                const captureBtn = document.createElement('button');
+                captureBtn.innerText = 'Capture Photo';
+                captureBtn.style.marginTop = '10px';
+                const modal = document.createElement('div');
+                modal.style.position = 'fixed';
+                modal.style.top = '0';
+                modal.style.left = '0';
+                modal.style.width = '100vw';
+                modal.style.height = '100vh';
+                modal.style.background = 'rgba(0,0,0,0.7)';
+                modal.style.display = 'flex';
+                modal.style.flexDirection = 'column';
+                modal.style.alignItems = 'center';
+                modal.style.justifyContent = 'center';
+                modal.appendChild(video);
+                modal.appendChild(captureBtn);
+                document.body.appendChild(modal);
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = stream;
+                captureBtn.onclick = function() {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    canvas.getContext('2d').drawImage(video, 0, 0);
+                    canvas.toBlob(blob => {
+                        const file = new File([blob], 'face.jpg', { type: 'image/jpeg' });
+                        const dt = new DataTransfer();
+                        dt.items.add(file);
+                        document.getElementById('face').files = dt.files;
+                        stream.getTracks().forEach(track => track.stop());
+                        document.body.removeChild(modal);
+                    }, 'image/jpeg');
+                };
+            }
+        };
+
+        // Open mic and record voice
+        document.getElementById('startRecordingBtn').onclick = async function(e) {
+            e.preventDefault();
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                const modal = document.createElement('div');
+                modal.style.position = 'fixed';
+                modal.style.top = '0';
+                modal.style.left = '0';
+                modal.style.width = '100vw';
+                modal.style.height = '100vh';
+                modal.style.background = 'rgba(0,0,0,0.7)';
+                modal.style.display = 'flex';
+                modal.style.flexDirection = 'column';
+                modal.style.alignItems = 'center';
+                modal.style.justifyContent = 'center';
+                const info = document.createElement('div');
+                info.innerText = 'Click to start recording (3 seconds)';
+                info.style.color = '#fff';
+                info.style.marginBottom = '10px';
+                const recordBtn = document.createElement('button');
+                recordBtn.innerText = 'Start Recording';
+                recordBtn.style.marginBottom = '10px';
+                modal.appendChild(info);
+                modal.appendChild(recordBtn);
+                document.body.appendChild(modal);
+                let mediaRecorder;
+                let audioChunks = [];
+                recordBtn.onclick = async function() {
+                    recordBtn.disabled = true;
+                    info.innerText = 'Recording...';
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    mediaRecorder = new MediaRecorder(stream);
+                    mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+                    mediaRecorder.onstop = () => {
+                        const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                        const file = new File([audioBlob], 'voice.wav', { type: 'audio/wav' });
+                        const dt = new DataTransfer();
+                        dt.items.add(file);
+                        document.getElementById('voice').files = dt.files;
+                        stream.getTracks().forEach(track => track.stop());
+                        document.body.removeChild(modal);
+                    };
+                    mediaRecorder.start();
+                    setTimeout(() => {
+                        mediaRecorder.stop();
+                        info.innerText = 'Processing...';
+                    }, 3000);
+                };
+            }
+        };
+
+        document.getElementById('registerForm').onsubmit = async function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            resultDiv.style.display = 'none';
+            resultDiv.innerText = '';
+            try {
+                const res = await fetch(`${backendUrl}/register`, {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+                resultDiv.style.display = 'block';
+                if (res.ok) {
+                    resultDiv.innerText = 'Registration Success!\n' + JSON.stringify(data, null, 2);
+                } else {
+                    resultDiv.innerText = 'Registration Failed!\n' + JSON.stringify(data, null, 2);
+                }
+            } catch (err) {
+                resultDiv.style.display = 'block';
+                resultDiv.innerText = 'Error: ' + err;
+            }
+        };
+
+        document.getElementById('verifyForm').onsubmit = async function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            resultDiv.style.display = 'none';
+            resultDiv.innerText = '';
+            try {
+                const res = await fetch(`${backendUrl}/verify`, {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+                resultDiv.style.display = 'block';
+                if (res.ok) {
+                    resultDiv.innerText = 'Verification Success!\n' + JSON.stringify(data, null, 2);
+                } else {
+                    resultDiv.innerText = 'Verification Failed!\n' + JSON.stringify(data, null, 2);
+                }
+            } catch (err) {
+                resultDiv.style.display = 'block';
+                resultDiv.innerText = 'Error: ' + err;
+            }
+        };
+
+        // Verification webcam capture
+        document.getElementById('openCameraBtnVerify').onclick = async function(e) {
+            e.preventDefault();
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                const video = document.createElement('video');
+                video.autoplay = true;
+                video.style.width = '100%';
+                video.style.maxHeight = '300px';
+                const captureBtn = document.createElement('button');
+                captureBtn.innerText = 'Capture Photo';
+                captureBtn.style.marginTop = '10px';
+                const modal = document.createElement('div');
+                modal.style.position = 'fixed';
+                modal.style.top = '0';
+                modal.style.left = '0';
+                modal.style.width = '100vw';
+                modal.style.height = '100vh';
+                modal.style.background = 'rgba(0,0,0,0.7)';
+                modal.style.display = 'flex';
+                modal.style.flexDirection = 'column';
+                modal.style.alignItems = 'center';
+                modal.style.justifyContent = 'center';
+                modal.appendChild(video);
+                modal.appendChild(captureBtn);
+                document.body.appendChild(modal);
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = stream;
+                captureBtn.onclick = function() {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    canvas.getContext('2d').drawImage(video, 0, 0);
+                    canvas.toBlob(blob => {
+                        const file = new File([blob], 'face.jpg', { type: 'image/jpeg' });
+                        const dt = new DataTransfer();
+                        dt.items.add(file);
+                        document.getElementById('face_verify').files = dt.files;
+                        stream.getTracks().forEach(track => track.stop());
+                        document.body.removeChild(modal);
+                    }, 'image/jpeg');
+                };
+            }
+        };
+        // Verification voice recording
+        document.getElementById('startRecordingBtnVerify').onclick = async function(e) {
+            e.preventDefault();
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                const modal = document.createElement('div');
+                modal.style.position = 'fixed';
+                modal.style.top = '0';
+                modal.style.left = '0';
+                modal.style.width = '100vw';
+                modal.style.height = '100vh';
+                modal.style.background = 'rgba(0,0,0,0.7)';
+                modal.style.display = 'flex';
+                modal.style.flexDirection = 'column';
+                modal.style.alignItems = 'center';
+                modal.style.justifyContent = 'center';
+                const info = document.createElement('div');
+                info.innerText = 'Click to start recording (3 seconds)';
+                info.style.color = '#fff';
+                info.style.marginBottom = '10px';
+                const recordBtn = document.createElement('button');
+                recordBtn.innerText = 'Start Recording';
+                recordBtn.style.marginBottom = '10px';
+                modal.appendChild(info);
+                modal.appendChild(recordBtn);
+                document.body.appendChild(modal);
+                let mediaRecorder;
+                let audioChunks = [];
+                recordBtn.onclick = async function() {
+                    recordBtn.disabled = true;
+                    info.innerText = 'Recording...';
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    mediaRecorder = new MediaRecorder(stream);
+                    mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+                    mediaRecorder.onstop = () => {
+                        const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                        const file = new File([audioBlob], 'voice.wav', { type: 'audio/wav' });
+                        const dt = new DataTransfer();
+                        dt.items.add(file);
+                        document.getElementById('voice_verify').files = dt.files;
+                        stream.getTracks().forEach(track => track.stop());
+                        document.body.removeChild(modal);
+                    };
+                    mediaRecorder.start();
+                    setTimeout(() => {
+                        mediaRecorder.stop();
+                        info.innerText = 'Processing...';
+                    }, 3000);
+                };
+            }
+        };
+    </script>
+</body>
+</html>

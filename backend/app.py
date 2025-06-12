@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 from ai.face_recognition import get_face_embedding
 from ai.voice_recognition import get_voice_embedding
 from utils.encryption import encrypt_data, decrypt_data
@@ -9,6 +10,7 @@ import hashlib
 import os
 
 app = Flask(__name__)
+CORS(app)
 
 @app.route('/register', methods=['POST'])
 def register():
